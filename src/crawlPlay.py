@@ -5,8 +5,7 @@ Created on Aug 28, 2013
 '''
 
 from bs4 import BeautifulSoup
-import urllib.request
-import urllib.parse
+import urllib
 import codecs
 import json
 import pickle
@@ -33,14 +32,13 @@ start_time = datetime.now()
 
 def getPageAsSoup( url, post_values ):
     if post_values:
-        data = urllib.parse.urlencode( post_values )
+        data = urllib.urlencode( post_values )
         data = data.encode( character_encoding )
-        req = urllib.request.Request( url, data )
     else:
-        req = url
+        data = None
     try:
-        response = urllib.request.urlopen( req )
-    except urllib.error.HTTPError as e:
+        response = urllib.urlopen( url, data )
+    except urllib.HTTPError as e:
         print( "HTTPError with: ", url, "\t", e )
         return None
     the_page = response.read()
