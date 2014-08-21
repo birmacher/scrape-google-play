@@ -12,6 +12,7 @@ import string
 import json
 import codecs
 import pdb
+import sys
 
 def loadState():
     try:
@@ -34,6 +35,7 @@ start_time = datetime.now()
 
 def getPage( url ):
     try:
+        #print "Loading url " + url
         response = urllib.urlopen( url )
     except urllib.error.HTTPError as e:
         print( "HTTPError with: ", url, e )
@@ -55,7 +57,7 @@ def getJSON( url ):
 def reportProgress():
     current_time = datetime.now()
     elapsed = current_time - start_time
-    v = ( ( len( apps_discovered ) - count_offset ) / elapsed.seconds ) * 60
+    v = ( ( len( apps_discovered ) - count_offset ) / elapsed.seconds ) * 60 if elapsed.seconds > 0 else 0
     t = len( apps_pending ) / v if v > 0 else 0
     print( "Pending = ", len( apps_pending ), " Discovered = ", len( apps_discovered ), " Velocity = ", str( v ), " parsed per min and Time remaining in min = ", str( t ) )
     print( json.dumps( apps_categories ) )
@@ -87,7 +89,8 @@ def getAppDetails( appUrl ):
 
     # e.g. appUrl: https://itunes.apple.com/us/app/calorie-counter-diet-tracker/id341232718?mt=8
 
-    appid = appUrl.split("/id")[1].split("?")[0]
+    matches = re.search("/id([0-9]+)\?", appUrl)
+    appid = matches.groups()[0]
     #print (appid)
     appDetails = getJSON("https://itunes.apple.com/lookup?id=" + appid)
     apps_discovered.append( appUrl )
@@ -110,6 +113,7 @@ def writeAppDetails ( apps_pending ):
         app = apps_pending.pop()
         if not app: continue
 
+        #print "Attepting to get app details for " + app
         try:
             app_data = getAppDetails( app )
         except Exception as e:
