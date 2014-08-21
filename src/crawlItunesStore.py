@@ -5,12 +5,13 @@ Created on Sep 7, 2013
 '''
 import pickle
 from datetime import datetime
-import urllib.request
+import urllib
 from bs4 import BeautifulSoup
 import re
 import string
 import json
 import codecs
+import pdb
 
 def loadState():
     try:
@@ -33,7 +34,7 @@ start_time = datetime.now()
 
 def getPage( url ):
     try:
-        response = urllib.request.urlopen( url )
+        response = urllib.urlopen( url )
     except urllib.error.HTTPError as e:
         print( "HTTPError with: ", url, e )
         return None
