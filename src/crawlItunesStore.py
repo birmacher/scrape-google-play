@@ -31,16 +31,25 @@ apps_categories = {}
 
 start_time = datetime.now()
 
-def getPageAsSoup( url ):
+def getPage( url ):
     try:
         response = urllib.request.urlopen( url )
     except urllib.error.HTTPError as e:
         print( "HTTPError with: ", url, e )
         return None
     the_page = response.read()
-    soup = BeautifulSoup( the_page )
+    return the_page
 
+def getPageAsSoup( url ):
+    the_page = getPage( url )
+    soup = BeautifulSoup( the_page )
     return soup
+
+def getJSON( url ):
+    the_page = getPage( url )
+    #print(the_page)
+    decoded_data = json.loads( the_page.decode('utf-8') )
+    return decoded_data
 
 def reportProgress():
     current_time = datetime.now()
@@ -67,64 +76,19 @@ def getApps( categoryUrl ):
         allAppLinks = [aDiv.get( 'href' ) for aDiv in categoryPage.findAll( 'a', href = re.compile( '^https://itunes.apple.com/us/app' ) )]
         if allAppLinks == previous_apps: break
         apps_pending.extend( [appLink for appLink in allAppLinks if appLink not in apps_pending] )
+        writeAppDetails( apps_pending )
         previous_apps = allAppLinks
         start_idx += 1
     saveState()
 
 def getAppDetails( appUrl ):
     if appUrl in apps_discovered: return None
-    soup = getPageAsSoup( appUrl )
-    if not soup: return None
 
-    pTitleDiv = soup.find( 'p', {'class' : 'title'} )
-    if pTitleDiv and pTitleDiv.getText() == 'One Moment Please.': return None
+    # e.g. appUrl: https://itunes.apple.com/us/app/calorie-counter-diet-tracker/id341232718?mt=8
 
-    appDetails = {}
-    appDetails['app_url'] = appUrl
-
-    titleDiv = soup.find( 'div', {'id' : 'title'} )
-    appDetails['title'] = titleDiv.find( 'h1' ).getText()
-    appDetails['developer'] = titleDiv.find( 'h2' ).getText()
-
-    detailsDiv = soup.find( 'div', {'id' : 'left-stack'} )
-    if not detailsDiv: return None
-
-    priceDiv = detailsDiv.find( 'div', {'class' : 'price'} )
-    if priceDiv: appDetails['price'] = priceDiv.getText()
-
-    categoryDiv = detailsDiv.find( 'li', {'class' : 'genre'} )
-    if categoryDiv: appDetails['category'] = categoryDiv.find( 'a' ).getText()
-
-    releaseDateDiv = detailsDiv.find( 'li', {'class' : 'release-date'} )
-    if releaseDateDiv: appDetails['release_date'] = releaseDateDiv.getText()
-
-    languageDiv = detailsDiv.find( 'li', {'class' : 'language'} )
-    if languageDiv: appDetails['language'] = languageDiv.getText().split()
-
-    contentRatingDiv = detailsDiv.find( 'div', {'class' : 'app-rating'} )
-    if contentRatingDiv: appDetails['content_rating'] = contentRatingDiv.getText()
-
-    contentRatingReasonDiv = detailsDiv.find( 'list app-rating-reasons' )
-    if contentRatingReasonDiv: appDetails['content_rating_reason'] = [li.getText() for li in contentRatingReasonDiv.findAll( 'li' )]
-
-    compatibilityDiv = detailsDiv.find( 'p' )
-    if compatibilityDiv: appDetails['compatibility'] = compatibilityDiv.getText()
-
-    customerRatingDivs = detailsDiv.findAll( 'div', {'class' : 'rating', 'role': 'img'} )
-    if customerRatingDivs:
-        customerRating = customerRatingDivs[-1].get( 'aria-label' ).split( ',' )
-        appDetails['rating'] = customerRating[0].strip()
-        appDetails['reviewers'] = customerRating[1].strip()
-
-    appLinksDiv = soup.find( 'div', {'class' : 'app-links'} )
-    if appLinksDiv:
-        for link in appLinksDiv.findAll( 'a', {'class' : 'see-all'} ):
-            text = link.getText()
-            href = link.get( 'href' )
-            if text.endswith( 'Web Site' ): appDetails['developer_wesite'] = href
-            elif text.endswith( 'Support' ): appDetails['support'] = href
-            elif text.endswith( 'Agreement' ): appDetails['license'] = href
-
+    appid = appUrl.split("/id")[1].split("?")[0]
+    #print (appid)
+    appDetails = getJSON("https://itunes.apple.com/lookup?id=" + appid)
     apps_discovered.append( appUrl )
 
     return appDetails
@@ -133,17 +97,7 @@ def closeFileHandlers( fileHandlers ):
     for v in fileHandlers.values():
         v.close()
 
-if __name__ == '__main__':
-    itunesStoreUrl = 'https://itunes.apple.com/us/genre/ios/id36?mt=8'
-    mainPage = getPageAsSoup( itunesStoreUrl )
-    allCategories = []
-    for column in ['list column first', 'list column', 'list column last']:
-        columnDiv = mainPage.find( 'ul', {'class' : column} )
-        allCategories.extend( aDiv.get( 'href' ) for aDiv in columnDiv.findAll( 'a', href = re.compile( '^https://itunes.apple.com/us/genre' ) ) )
-
-    for category, alphabet in [( x, y ) for x in allCategories for y in string.ascii_uppercase]:
-        getApps( category + '&letter=' + alphabet )
-
+def writeAppDetails ( apps_pending ):
     fileHandlers = {}
     count = 100
     while apps_pending:
@@ -164,18 +118,33 @@ if __name__ == '__main__':
         if not app_data:
             continue
 
-        if not app_data['category']: app_data['category'] = 'uncategorized'
+        category = app_data['results'][0]['genres'][0]
 
-        if app_data['category'].lower() not in fileHandlers:
-            fileHandlers[app_data['category'].lower()] = codecs.open( '_'.join( ["apple_appstore", app_data['category'].lower()] ), 'ab', character_encoding, buffering = 0 )
-            apps_categories[app_data['category'].lower()] = 0
-        apps_categories[app_data['category'].lower()] = apps_categories[app_data['category'].lower()] + 1
-        fileHandler = fileHandlers[app_data['category'].lower()]
+        if not category: category = 'uncategorized'
+
+        if category.lower() not in fileHandlers:
+            fileHandlers[category.lower()] = codecs.open( '/'.join( ["apple_appstore", category.lower()] ), 'ab', character_encoding, buffering = 0 )
+            apps_categories[category.lower()] = 0
+        apps_categories[category.lower()] = apps_categories[category.lower()] + 1
+        fileHandler = fileHandlers[category.lower()]
         try:
-            fileHandler.write( json.dumps( app_data ) + "\n" )
+            fileHandler.write( json.dumps( app_data ) + "\n \n" )
         except Exception as e:
             print( e )
 
     saveState()
     closeFileHandlers( fileHandlers )
+
+
+if __name__ == '__main__':
+    itunesStoreUrl = 'https://itunes.apple.com/us/genre/ios/id36?mt=8'
+    mainPage = getPageAsSoup( itunesStoreUrl )
+    allCategories = []
+    for column in ['list column first', 'list column', 'list column last']:
+        columnDiv = mainPage.find( 'ul', {'class' : column} )
+        allCategories.extend( aDiv.get( 'href' ) for aDiv in columnDiv.findAll( 'a', href = re.compile( '^https://itunes.apple.com/us/genre' ) ) )
+
+    for category, alphabet in [( x, y ) for x in allCategories for y in string.ascii_uppercase]:
+        getApps( category + '&letter=' + alphabet )
+
 
