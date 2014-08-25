@@ -5,7 +5,7 @@ Created on Sep 7, 2013
 '''
 import pickle
 from datetime import datetime
-import urllib
+import urllib2
 from bs4 import BeautifulSoup
 import re
 import string
@@ -36,8 +36,8 @@ start_time = datetime.now()
 def getPage( url ):
     try:
         #print "Loading url " + url
-        response = urllib.urlopen( url )
-    except urllib.error.HTTPError as e:
+        response = urllib2.urlopen( url )
+    except urllib2.HTTPError as e:
         print( "HTTPError with: ", url, e )
         return None
     the_page = response.read()
@@ -123,7 +123,12 @@ def writeAppDetails ( apps_pending ):
         if not app_data:
             continue
 
-        category = app_data['results'][0]['genres'][0]
+        category = None
+        try:
+            app_results = app_data['results'][0]
+            category = app_results['genres'][0]
+        except Exception as e:
+            print ( app, e, app_data )
 
         if not category: category = 'uncategorized'
 
@@ -135,7 +140,7 @@ def writeAppDetails ( apps_pending ):
         try:
             fileHandler.write( json.dumps( app_data ) + "\n \n" )
         except Exception as e:
-            print( e )
+            print( app, e )
 
     saveState()
     closeFileHandlers( fileHandlers )
