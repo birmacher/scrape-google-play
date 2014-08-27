@@ -18,38 +18,51 @@ def loadState():
     try:
         state_file = open( "itunes_store_state_dump.pba", "rb" )
         apps_discovered = pickle.load( state_file )
-        apps_pending = pickle.load( state_file )
+        apps_pending = []
         state_file.close()
         print( "Pending = ", len( apps_pending ), " Discovered = ", len( apps_discovered ) )
-        return apps_discovered, apps_pending
+        return apps_discovered
     except IOError:
         print( "A fresh start ..." )
         return [], []
 
+pending_save_data = False
 character_encoding = 'utf-8'
-apps_discovered, apps_pending = loadState()
+apps_discovered = loadState()
+apps_pending = []
 count_offset = len( apps_discovered )
 apps_categories = {}
 
 start_time = datetime.now()
 
 def getPage( url ):
-    try:
-        #print "Loading url " + url
-        response = urllib2.urlopen( url )
-    except urllib2.HTTPError as e:
-        print( "HTTPError with: ", url, e )
-        return None
-    the_page = response.read()
-    return the_page
+    response = None
+    for i in range(5):
+        try:
+            #print "Loading url " + url
+            response = urllib2.urlopen( url )
+            the_page = response.read()
+            return the_page
+        except (urllib2.URLError, urllib2.HTTPError) as e:
+            print( "url lib error with: ", url, e, e.reason )
+            if i < 4:
+                print("Retrying")
+
+    print( "All retries failed" )
+    return None
 
 def getPageAsSoup( url ):
     the_page = getPage( url )
     soup = BeautifulSoup( the_page )
     return soup
 
+def getAppId( url ):
+    matches = re.search("/id([0-9]+)\?", url)
+    return matches.groups()[0]
+
 def getJSON( url ):
     the_page = getPage( url )
+
     #print(the_page)
     decoded_data = json.loads( the_page.decode('utf-8') )
     return decoded_data
@@ -63,11 +76,15 @@ def reportProgress():
     print( json.dumps( apps_categories ) )
 
 def saveState():
-    state_file = open( "itunes_store_state_dump.pba", "wb" )
-    pickle.dump( apps_discovered, state_file )
-    pickle.dump( apps_pending, state_file )
-    state_file.close()
+    global pending_save_data
+
     reportProgress()
+
+    if pending_save_data:
+        state_file = open( "itunes_store_state_dump.pba", "wb" )
+        pickle.dump( apps_discovered, state_file )
+        state_file.close()
+        pending_save_data = False
 
 def getApps( categoryUrl ):
     previous_apps = []
@@ -75,25 +92,38 @@ def getApps( categoryUrl ):
     while( True ):
         url = categoryUrl + "&page=" + str( start_idx )
         print( url )
+        print "Downloading page"
         categoryPage = getPageAsSoup( url )
+        print "Scanning page"
         allAppLinks = [aDiv.get( 'href' ) for aDiv in categoryPage.findAll( 'a', href = re.compile( '^https://itunes.apple.com/us/app' ) )]
         if allAppLinks == previous_apps: break
-        apps_pending.extend( [appLink for appLink in allAppLinks if appLink not in apps_pending] )
+
+        print "Checking app links"
+        for appLink in allAppLinks:
+            appId = getAppId(appLink)
+            if appId not in apps_pending:
+                apps_pending.append(appId)
+
+        print "Writing app details"
         writeAppDetails( apps_pending )
         previous_apps = allAppLinks
+
+        print "Moving on"
         start_idx += 1
     saveState()
 
-def getAppDetails( appUrl ):
-    if appUrl in apps_discovered: return None
+def getAppDetails( appId ):
+    global pending_save_data
+
+    if appId in apps_discovered: return None
 
     # e.g. appUrl: https://itunes.apple.com/us/app/calorie-counter-diet-tracker/id341232718?mt=8
 
-    matches = re.search("/id([0-9]+)\?", appUrl)
-    appid = matches.groups()[0]
-    #print (appid)
-    appDetails = getJSON("https://itunes.apple.com/lookup?id=" + appid)
-    apps_discovered.append( appUrl )
+    print "Downloading " + appId
+
+    appDetails = getJSON("https://itunes.apple.com/lookup?id=" + appId)
+    apps_discovered.append( appId )
+    pending_save_data = True
 
     return appDetails
 
