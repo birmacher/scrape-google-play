@@ -13,6 +13,8 @@ import json
 import codecs
 import pdb
 import sys
+from time import gmtime, strftime
+import os
 
 def loadState():
     try:
@@ -24,7 +26,7 @@ def loadState():
         return apps_discovered
     except IOError:
         print( "A fresh start ..." )
-        return [], []
+        return list(([], []))
 
 pending_save_data = False
 character_encoding = 'utf-8'
@@ -163,6 +165,9 @@ def writeAppDetails ( apps_pending ):
         if not category: category = 'uncategorized'
 
         if category.lower() not in fileHandlers:
+            if not os.path.exists("apple_appstore"):
+                os.makedirs("apple_appstore")
+
             fileHandlers[category.lower()] = codecs.open( '/'.join( ["apple_appstore", category.lower()] ), 'ab', character_encoding, buffering = 0 )
             apps_categories[category.lower()] = 0
         apps_categories[category.lower()] = apps_categories[category.lower()] + 1
@@ -177,7 +182,12 @@ def writeAppDetails ( apps_pending ):
 
 
 if __name__ == '__main__':
-    itunesStoreUrl = 'https://itunes.apple.com/us/genre/ios/id36?mt=8'
+    print strftime("%Y-%m-%d %H:%M:%S", gmtime())
+
+    # iOS: https://itunes.apple.com/us/genre/ios/id36?mt=8
+    # Mac: https://itunes.apple.com/us/genre/mac/id39?mt=12
+    # itunesStoreUrl = 'https://itunes.apple.com/us/genre/ios/id36?mt=8'
+    itunesStoreUrl = 'https://itunes.apple.com/us/genre/mac/id39?mt=12'
     mainPage = getPageAsSoup( itunesStoreUrl )
     allCategories = []
     for column in ['list column first', 'list column', 'list column last']:
@@ -186,5 +196,7 @@ if __name__ == '__main__':
 
     for category, alphabet in [( x, y ) for x in allCategories for y in string.ascii_uppercase]:
         getApps( category + '&letter=' + alphabet )
+
+    print strftime("%Y-%m-%d %H:%M:%S", gmtime())
 
 
